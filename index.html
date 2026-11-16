@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GD Flavors Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=STIX+Two+Text:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<style>
+/* Layout idea: a lab bench. Tab per algorithm; plot and controls on the left, rule and readout on the right, practice checks underneath. */
+:root{
+  --bg:#eef1f5; --surface:#ffffff; --ink:#14213a; --muted:#5b6880; --line:#d5dbe5;
+  --accent:#1f5fd6; --path:#e2571c; --alt:#7a3fc4; --good:#12805c; --bad:#c2334d;
+  --band-lo:#2b4a9b; --band-hi:#e9eef8;
+  --f-display:"Bricolage Grotesque","IBM Plex Sans",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  --f-math:"STIX Two Text","Cambria Math",Georgia,serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0f1420; --surface:#171d2c; --ink:#e6eaf3; --muted:#97a3ba; --line:#2b3449;
+    --accent:#76a6ff; --path:#ff8a4c; --alt:#c594ff; --good:#3fc79a; --bad:#ff6f88;
+    --band-lo:#0c1430; --band-hi:#4268c9; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0f1420; --surface:#171d2c; --ink:#e6eaf3; --muted:#97a3ba; --line:#2b3449;
+  --accent:#76a6ff; --path:#ff8a4c; --alt:#c594ff; --good:#3fc79a; --bad:#ff6f88;
+  --band-lo:#0c1430; --band-hi:#4268c9; color-scheme:dark;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:400 15px/1.5 var(--f-body)}
+.wrap{max-width:1120px;margin:0 auto;padding:20px 16px 56px}
+header{display:flex;flex-wrap:wrap;gap:8px 24px;align-items:flex-end;justify-content:space-between;margin-bottom:14px}
+h1{font:700 30px/1.1 var(--f-display);margin:0;letter-spacing:-.01em}
+header p{margin:4px 0 0;color:var(--muted)}
+.score{font:500 13px var(--f-mono);border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 12px;white-space:nowrap}
+.score b{color:var(--good)}
+nav{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px}
+nav a{font:500 14px var(--f-body);color:var(--ink);text-decoration:none;border:1px solid var(--line);background:var(--surface);padding:7px 12px;border-radius:8px;display:flex;gap:8px;align-items:center}
+nav a .n{font:400 11px var(--f-mono);color:var(--muted)}
+nav a[aria-current="page"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+nav a[aria-current="page"] .n{color:var(--bg);opacity:.75}
+nav a.done .n{color:var(--good)}
+nav a[aria-current="page"].done .n{color:var(--bg)}
+a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,canvas:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.view{display:none}
+.view.on{display:block}
+h2{font:700 22px/1.2 var(--f-display);margin:0 0 4px;text-wrap:balance}
+h3{font:600 12px var(--f-body);letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin:0 0 8px}
+.lede{max-width:68ch;margin:0 0 14px;color:var(--muted)}
+.bench{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:16px;align-items:start;margin-bottom:16px}
+@media (max-width:860px){.bench{grid-template-columns:minmax(0,1fr)}}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px}
+.stack{display:flex;flex-direction:column;gap:16px}
+canvas{display:block;width:100%;border-radius:6px;touch-action:manipulation}
+canvas.sq{aspect-ratio:1/1;max-width:520px;margin:0 auto}
+canvas.wide{aspect-ratio:5/3}
+canvas.short{aspect-ratio:5/2}
+canvas.click{cursor:crosshair}
+.controls{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;margin-top:12px}
+.ctl{display:flex;flex-direction:column;gap:2px;font-size:13px;color:var(--muted);min-width:130px;flex:1}
+.ctl span b{font:500 13px var(--f-mono);color:var(--ink)}
+input[type=range]{width:100%;accent-color:var(--accent)}
+select,input[type=text]{font:400 14px var(--f-body);color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:6px 8px}
+.btns{display:flex;flex-wrap:wrap;gap:8px}
+button{font:500 14px var(--f-body);cursor:pointer;border-radius:7px;padding:7px 12px;border:1px solid var(--line);background:var(--bg);color:var(--ink)}
+button.pri{background:var(--accent);border-color:var(--accent);color:#fff}
+:root[data-theme="dark"] button.pri{color:#0b1020}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) button.pri{color:#0b1020}}
+button.ghost{border-color:transparent;background:none;color:var(--accent);padding:7px 4px}
+.eq{font:400 17px/1.7 var(--f-math);background:var(--bg);border-radius:8px;padding:10px 12px;overflow-x:auto;white-space:nowrap}
+.eq i,.m i{font-style:italic}
+.m{font-family:var(--f-math);font-size:1.08em;white-space:nowrap}
+sub,sup{font-size:.72em;line-height:0}
+.read{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin:0}
+.read div{background:var(--bg);border-radius:8px;padding:8px 10px}
+.read dt{font-size:12px;color:var(--muted)}
+.read dd{margin:0;font:500 15px var(--f-mono);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.tag{display:inline-block;font:500 11px var(--f-mono);padding:1px 6px;border-radius:999px;border:1px solid currentColor;margin-left:4px}
+.tag.good{color:var(--good)} .tag.bad{color:var(--bad)}
+.tblwrap{max-height:210px;overflow:auto;border:1px solid var(--line);border-radius:8px}
+table{border-collapse:collapse;width:100%;font:400 12.5px var(--f-mono);font-variant-numeric:tabular-nums}
+th,td{padding:5px 8px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+th{position:sticky;top:0;background:var(--surface);color:var(--muted);font-weight:500}
+tr.ok td{color:var(--good)} tr.no td:last-child{color:var(--bad)}
+.note{font-size:13px;color:var(--muted);margin:8px 0 0}
+.try{margin:0;padding-left:18px;font-size:14px}
+.try li{margin-bottom:6px}
+.legend{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12.5px;color:var(--muted);margin-top:8px}
+.legend i{display:inline-block;width:14px;height:3px;border-radius:2px;vertical-align:middle;margin-right:5px}
+.checks{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}
+.check{background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--line);border-radius:10px;padding:12px 14px}
+.check.solved{border-left-color:var(--good)}
+.check .q{margin:0 0 10px}
+.check .lab{font:500 11px var(--f-mono);color:var(--muted);display:block;margin-bottom:4px}
+.fields{display:flex;flex-wrap:wrap;gap:8px 12px;margin-bottom:10px}
+.fields label{display:flex;gap:6px;align-items:center;font-size:14px}
+.fields input{width:84px;font-family:var(--f-mono)}
+.opts{display:flex;flex-direction:column;gap:6px;margin-bottom:10px}
+.opts.inline{flex-direction:row;flex-wrap:wrap;gap:6px 14px}
+.opts label{display:flex;gap:8px;align-items:flex-start;font-size:14px}
+.opts input{margin-top:4px;accent-color:var(--accent)}
+.fb{margin:8px 0 0;font-size:14px}
+.fb.good{color:var(--good)} .fb.bad{color:var(--bad)}
+.why{margin:6px 0 0;font-size:13.5px;color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div>
+    <h1>GD Flavors Lab</h1>
+    <p>Practice for Lecture 8: gradient descent revisited, and its new flavors</p>
+  </div>
+  <div class="score" aria-live="polite">Checks solved <b id="score">0</b> / <span id="total">0</span> <button class="ghost" id="resetAll" style="padding:0 0 0 8px;font-size:12px">reset</button></div>
+</header>
+
+<nav id="nav" aria-label="Topics">
+  <a href="#line-search" data-v="line-search">Line search <span class="n"></span></a>
+  <a href="#subgradient" data-v="subgradient">Subgradients <span class="n"></span></a>
+  <a href="#projected" data-v="projected">Projected GD <span class="n"></span></a>
+  <a href="#frank-wolfe" data-v="frank-wolfe">Frank-Wolfe <span class="n"></span></a>
+  <a href="#sgd" data-v="sgd">Stochastic GD <span class="n"></span></a>
+  <a href="#proximal" data-v="proximal">Proximal GD <span class="n"></span></a>
+</nav>
+
+<!-- ===================== LINE SEARCH ===================== -->
+<section class="view" data-view="line-search">
+  <h2>Backtracking line search</h2>
+  <p class="lede">Start each step with <span class="m"><i>γ</i> = 1</span> and shrink it by <span class="m"><i>β</i></span> until the function has decreased enough. The demo runs on <span class="m"><i>f</i>(<i>x</i>) = <i>x</i><sup>2</sup></span> from <span class="m"><i>x</i><sub>0</sub> = −4</span>.</p>
+  <div class="bench">
+    <div class="card">
+      <canvas id="lsCv" class="wide" role="img" aria-label="Plot of f(x)=x squared with line search trial points"></canvas>
+      <div class="legend"><span><i style="background:var(--accent)"></i>f(x)</span><span><i style="background:var(--muted)"></i>dashed: f(x<sub>t</sub>) − αγ‖∇f‖², the acceptance threshold</span><span><i style="background:var(--bad)"></i>rejected trial</span><span><i style="background:var(--path)"></i>accepted iterate</span></div>
+      <div class="controls">
+        <label class="ctl"><span>α = <b id="lsAo"></b></span><input type="range" id="lsA" min="0.01" max="0.49" step="0.01" value="0.2"></label>
+        <label class="ctl"><span>β = <b id="lsBo"></b></span><input type="range" id="lsB" min="0.05" max="0.99" step="0.01" value="0.6"></label>
+      </div>
+      <div class="controls">
+        <div class="btns"><button class="pri" id="lsStep">Take one step</button><button id="lsReset">Reset to x = −4</button></div>
+        <div class="btns"><button id="lsP1">Preset α=.2, β=.99</button><button id="lsP2">Preset α=.1, β=.3</button></div>
+      </div>
+    </div>
+    <div class="stack">
+      <div class="card">
+        <h3>Rule</h3>
+        <div class="eq">while <i>f</i>(<i>x<sub>t</sub></i> − <i>γ</i>∇<i>f</i>(<i>x<sub>t</sub></i>)) &gt; <i>f</i>(<i>x<sub>t</sub></i>) − <i>α</i>·<i>γ</i>·‖∇<i>f</i>(<i>x<sub>t</sub></i>)‖<sup>2</sup>:&nbsp; <i>γ</i> ← <i>βγ</i><br><i>x</i><sub><i>t</i>+1</sub> = <i>x<sub>t</sub></i> − <i>γ</i>∇<i>f</i>(<i>x<sub>t</sub></i>)</div>
+        <dl class="read" style="margin-top:10px">
+          <div><dt>iteration t</dt><dd id="lsT"></dd></div>
+          <div><dt>x<sub>t</sub></dt><dd id="lsX"></dd></div>
+          <div><dt>f(x<sub>t</sub>)</dt><dd id="lsF"></dd></div>
+          <div><dt>function evaluations</dt><dd id="lsE"></dd></div>
+        </dl>
+      </div>
+      <div class="card">
+        <h3>Trials in the last step</h3>
+        <div class="tblwrap"><table id="lsTbl"><thead><tr><th>γ</th><th>f(trial)</th><th>threshold</th><th>verdict</th></tr></thead><tbody></tbody></table></div>
+        <p class="note" id="lsNote">Press “Take one step” to see every step size that was tried.</p>
+      </div>
+      <div class="card">
+        <h3>Try this</h3>
+        <ol class="try">
+          <li>Run each preset from x = −4 until f is below 0.001. Which one uses fewer function evaluations in total?</li>
+          <li>Set β = 0.6 and move α from 0.05 to 0.45. Watch the dashed line tilt and the accepted γ change.</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+  <h3>Practice</h3>
+  <div class="checks" data-checks="ls1,ls2"></div>
+</section>
+
+<!-- ===================== SUBGRADIENT ===================== -->
+<section class="view" data-view="subgradient">
+  <h2>Subgradients and subgradient descent</h2>
+  <p class="lede">A subgradient of a convex <span class="m"><i>g</i></span> at <span class="m"><i>x</i><sub>0</sub></span> is the slope of a line that touches <span class="m"><i>g</i></span> at <span class="m"><i>x</i><sub>0</sub></span> and stays on or below it everywhere. Both demos use <span class="m"><i>g</i>(<i>x</i>) = |<i>x</i>|</span>.</p>
+  <div class="bench">
+    <div class="card">
+      <h3>Is this slope a subgradient?</h3>
+      <canvas id="suCv" class="wide" role="img" aria-label="Plot of absolute value with a candidate underestimating line"></canvas>
+      <div class="controls">
+        <label class="ctl"><span>x<sub>0</sub> = <b id="suXo"></b></span><input type="range" id="suX" min="-3" max="3" step="0.5" value="0"></label>
+        <label class="ctl"><span>slope = <b id="suSo"></b></span><input type="range" id="suS" min="-2" max="2" step="0.25" value="0.5"></label>
+      </div>
+      <p class="fb" id="suMsg" aria-live="polite"></p>
+    </div>
+    <div class="stack">
+      <div class="card">
+        <h3>Subgradient descent on |x| from x = 4</h3>
+        <div class="eq"><i>x</i><sub><i>t</i>+1</sub> = <i>x<sub>t</sub></i> − <i>γ<sub>t</sub></i> <i>s<sub>f</sub></i>(<i>x<sub>t</sub></i>)</div>
+        <canvas id="sdCv" class="short" style="margin-top:10px" role="img" aria-label="Function value per iteration"></canvas>
+        <div class="legend"><span><i style="background:var(--path)"></i>f(x<sub>t</sub>)</span><span><i style="background:var(--accent)"></i>f<sub>best</sub>(t)</span></div>
+        <div class="controls">
+          <label class="ctl"><span>step size rule</span>
+            <select id="sdRule"><option value="fixed">fixed γ</option><option value="abt">γ_t = a / (b + t)</option><option value="sqrt">γ_t = a / √t</option></select></label>
+          <label class="ctl" id="sdGw"><span>γ = <b id="sdGo"></b></span><input type="range" id="sdG" min="0.1" max="1.5" step="0.1" value="0.9"></label>
+          <label class="ctl" id="sdAw"><span>a = <b id="sdAo"></b></span><input type="range" id="sdA" min="0.5" max="4" step="0.5" value="2"></label>
+          <label class="ctl" id="sdBw"><span>b = <b id="sdBo"></b></span><input type="range" id="sdB" min="0" max="5" step="1" value="0"></label>
+        </div>
+        <div class="controls"><div class="btns"><button class="pri" id="sdStep">Step</button><button id="sdRun">Run 60 steps</button><button id="sdReset">Reset</button></div></div>
+        <dl class="read" style="margin-top:10px">
+          <div><dt>t</dt><dd id="sdT"></dd></div>
+          <div><dt>x<sub>t</sub></dt><dd id="sdX"></dd></div>
+          <div><dt>f<sub>best</sub>(t)</dt><dd id="sdF"></dd></div>
+        </dl>
+      </div>
+      <div class="card">
+        <h3>Try this</h3>
+        <ol class="try">
+          <li>Run with fixed γ = 0.9, the setting on the slide. Where does f<sub>best</sub> stop improving, and why?</li>
+          <li>Halve γ and run again. The floor ε(γ) moves. By how much?</li>
+          <li>Switch to a / (b + t). Does f<sub>best</sub> still have a floor?</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+  <h3>Practice</h3>
+  <div class="checks" data-checks="sg1,sg2,sg3"></div>
+</section>
+
+<!-- ===================== PROJECTED ===================== -->
+<section class="view" data-view="projected">
+  <h2>Projected gradient descent</h2>
+  <p class="lede">Take a gradient step, then project back onto the constraint set <span class="m"><i>C</i></span>. The objective is the one from the slides, <span class="m"><i>f</i>(<i>x</i>,<i>y</i>) = (<i>x</i>−2)<sup>2</sup> − (<i>x</i>−2)(<i>y</i>−2) + ½(<i>y</i>−2)<sup>2</sup></span>.</p>
+  <div class="bench">
+    <div class="card">
+      <canvas id="pgCv" class="sq click" tabindex="0" role="img" aria-label="Contour plot with the projected gradient descent path. Click to move the starting point."></canvas>
+      <div class="legend"><span><i style="background:var(--path)"></i>iterates</span><span><i style="background:var(--ink)"></i>dashed outline: C</span><span>hollow point: gradient step before projection</span></div>
+      <div class="controls">
+        <label class="ctl"><span>constraint set C</span>
+          <select id="pgC"><option value="orth">x ≤ 0, y ≤ 0</option><option value="none">none (plain GD)</option><option value="ball">‖(x, y)‖₂ ≤ 1</option></select></label>
+        <label class="ctl"><span>step size γ = <b id="pgGo"></b></span><input type="range" id="pgG" min="0.02" max="0.8" step="0.02" value="0.1"></label>
+      </div>
+      <div class="controls"><div class="btns"><button class="pri" id="pgStep">Step</button><button id="pgRun">Run 40 steps</button><button id="pgReset">Reset to (−5, −2)</button></div></div>
+      <p class="note">Click the plot to choose a different start. A start outside C is projected first.</p>
+    </div>
+    <div class="stack">
+      <div class="card">
+        <h3>Rule</h3>
+        <div class="eq"><i>x</i><sub><i>t</i>+1</sub> = proj<sub><i>C</i></sub>(<i>x<sub>t</sub></i> − <i>γ<sub>t</sub></i>∇<i>f</i><sub>0</sub>(<i>x<sub>t</sub></i>))<br>proj<sub><i>C</i></sub>(<i>y</i>) = argmin<sub><i>x</i>∈<i>C</i></sub> ½‖<i>y</i> − <i>x</i>‖<sub>2</sub><sup>2</sup></div>
+        <div class="eq" style="margin-top:8px;font-size:15px">∇<i>f</i> = ( 2(<i>x</i>−2) − (<i>y</i>−2),&nbsp; −(<i>x</i>−2) + (<i>y</i>−2) )</div>
+        <dl class="read" style="margin-top:10px">
+          <div><dt>t</dt><dd id="pgT"></dd></div>
+          <div><dt>x<sub>t</sub></dt><dd id="pgX"></dd></div>
+          <div><dt>f(x<sub>t</sub>)</dt><dd id="pgF"></dd></div>
+          <div><dt>last step left C?</dt><dd id="pgO"></dd></div>
+        </dl>
+      </div>
+      <div class="card">
+        <h3>Try this</h3>
+        <ol class="try">
+          <li>Run plain GD, then switch to x ≤ 0, y ≤ 0 with the same start and step size. Where does each path end?</li>
+          <li>With the orthant constraint, count how many steps needed a projection. The path slides along the boundary once it reaches it.</li>
+          <li>Push γ past 0.76 with no constraint. What happens, and does the unit ball constraint change that?</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+  <h3>Practice</h3>
+  <div class="checks" data-checks="pg1,pg2,pg3"></div>
+</section>
+
+<!-- ===================== FRANK-WOLFE ===================== -->
+<section class="view" data-view="frank-wolfe">
+  <h2>Conditional gradients (Frank-Wolfe)</h2>
+  <p class="lede">Minimize the linear approximation of <span class="m"><i>f</i><sub>0</sub></span> over <span class="m"><i>C</i></span>, then move part of the way toward that minimizer. The problem is the worked example: <span class="m">min (<i>x</i>−.25)<sup>2</sup> + (<i>y</i>−.25)<sup>2</sup></span> subject to <span class="m"><i>x</i>+<i>y</i> ≤ 1, <i>x</i>,<i>y</i> ≥ 0</span>, starting at (.1, .7).</p>
+  <div class="bench">
+    <div class="card">
+      <canvas id="fwCv" class="sq click" tabindex="0" role="img" aria-label="Triangle constraint set with Frank-Wolfe iterates. Click a vertex to predict the linear minimizer."></canvas>
+      <div class="legend"><span><i style="background:var(--path)"></i>iterates</span><span><i style="background:var(--accent)"></i>arrow: −∇f at x<sub>t</sub></span><span>ringed vertex: s<sub>t</sub> from the last step</span></div>
+      <p class="fb" id="fwMsg" aria-live="polite">Predict s<sub>t</sub>: click the vertex that minimizes ∇f(x<sub>t</sub>)ᵀs.</p>
+      <div class="controls">
+        <label class="ctl"><span>step size rule</span>
+          <select id="fwRule"><option value="dim">γ_t = 2 / (2 + t)</option><option value="one">fixed γ = 1</option><option value="half">fixed γ = 0.5</option></select></label>
+        <div class="btns"><button class="pri" id="fwAuto">Step without predicting</button><button id="fwReset">Reset</button></div>
+      </div>
+    </div>
+    <div class="stack">
+      <div class="card">
+        <h3>Rule</h3>
+        <div class="eq"><i>s<sub>t</sub></i> = argmin<sub><i>x</i>∈<i>C</i></sub> ∇<i>f</i><sub>0</sub>(<i>x<sub>t</sub></i>)<sup>T</sup><i>x</i><br><i>x</i><sub><i>t</i>+1</sub> = <i>x<sub>t</sub></i> + <i>γ<sub>t</sub></i>(<i>s<sub>t</sub></i> − <i>x<sub>t</sub></i>)</div>
+        <dl class="read" style="margin-top:10px">
+          <div><dt>t</dt><dd id="fwT"></dd></div>
+          <div><dt>x<sub>t</sub></dt><dd id="fwX"></dd></div>
+          <div><dt>∇f(x<sub>t</sub>)</dt><dd id="fwG"></dd></div>
+          <div><dt>f(x<sub>t</sub>)</dt><dd id="fwF"></dd></div>
+          <div><dt>gap f(x<sub>t</sub>) − g(s<sub>t</sub>)</dt><dd id="fwGap"></dd></div>
+          <div><dt>next γ<sub>t</sub></dt><dd id="fwGam"></dd></div>
+        </dl>
+      </div>
+      <div class="card">
+        <h3>Linear objective at each vertex</h3>
+        <div class="tblwrap"><table id="fwTbl"><thead><tr><th>vertex s</th><th>∇f(x<sub>t</sub>)ᵀs</th></tr></thead><tbody></tbody></table></div>
+        <p class="note">A linear function on a polytope is minimized at a vertex, so only three candidates need checking. The table is hidden until you predict or step.</p>
+      </div>
+      <div class="card">
+        <h3>Try this</h3>
+        <ol class="try">
+          <li>Step eight times with 2 / (2 + t) and watch the gap shrink. The gap is the stopping criterion: it always upper-bounds f(x<sub>t</sub>) − f(x*).</li>
+          <li>Reset and use fixed γ = 1. Describe the path. This is the answer to “it must be diminishing, why?”</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+  <h3>Practice</h3>
+  <div class="checks" data-checks="fw1,fw2,fw3"></div>
+</section>
+
+<!-- ===================== SGD ===================== -->
+<section class="view" data-view="sgd">
+  <h2>Stochastic gradient descent with minibatches</h2>
+  <p class="lede">Estimate the full-dataset gradient from <span class="m"><i>B</i></span> examples drawn uniformly without replacement. The demo fits a line <span class="m"><i>y</i> ≈ <i>wx</i> + <i>b</i></span> to <span class="m"><i>N</i> = 40</span> points by minimizing mean squared error.</p>
+  <div class="bench">
+    <div class="card">
+      <canvas id="sgCv" class="sq" role="img" aria-label="Loss contours over w and b with the SGD path"></canvas>
+      <div class="legend"><span><i style="background:var(--path)"></i>SGD path</span><span>pale dots: where 40 different minibatches would send the next step</span><span>ring: the full-gradient step</span></div>
+      <div class="controls">
+        <label class="ctl"><span>batch size B = <b id="sgBo"></b></span><input type="range" id="sgB" min="1" max="40" step="1" value="1"></label>
+        <label class="ctl"><span>step size α = <b id="sgAo"></b></span><input type="range" id="sgA" min="0.01" max="0.4" step="0.01" value="0.1"></label>
+      </div>
+      <div class="controls"><div class="btns"><button class="pri" id="sgStep">Step</button><button id="sgRun">Run 60 steps</button><button id="sgReset">Reset</button></div></div>
+    </div>
+    <div class="stack">
+      <div class="card">
+        <h3>Rule</h3>
+        <div class="eq"><i>w</i> ← <i>w</i> − <i>α</i> · (1/<i>B</i>) Σ<sub><i>i</i>=1..<i>B</i></sub> ∇<sub><i>w</i></sub><i>L</i>(<i>x<sub>i</sub></i>, <i>y<sub>i</sub></i>, <i>w</i>)</div>
+        <dl class="read" style="margin-top:10px">
+          <div><dt>updates</dt><dd id="sgT"></dd></div>
+          <div><dt>per-example gradients computed</dt><dd id="sgE"></dd></div>
+          <div><dt>(w, b)</dt><dd id="sgW"></dd></div>
+          <div><dt>full-data loss</dt><dd id="sgL"></dd></div>
+        </dl>
+      </div>
+      <div class="card">
+        <h3>Data and current fit</h3>
+        <canvas id="sgData" class="wide" role="img" aria-label="Scatter of the data with the current fitted line; the last minibatch is highlighted"></canvas>
+        <div class="legend"><span><i style="background:var(--path)"></i>points in the last minibatch</span><span><i style="background:var(--accent)"></i>current line</span></div>
+      </div>
+      <div class="card">
+        <h3>Try this</h3>
+        <ol class="try">
+          <li>Slide B from 1 to 40 without stepping. The cloud of possible next steps tightens around the ring and collapses onto it at B = N.</li>
+          <li>Run 60 steps at B = 1, reset, then run 60 at B = 40. Compare the final loss against the number of per-example gradients each run paid for.</li>
+          <li>At B = 1, lower α to 0.02. The path gets less noisy near the minimum. What did that cost?</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+  <h3>Practice</h3>
+  <div class="checks" data-checks="sgd1,sgd2"></div>
+</section>
+
+<!-- ===================== PROXIMAL ===================== -->
+<section class="view" data-view="proximal">
+  <h2>Proximal gradient descent</h2>
+  <p class="lede">For an objective <span class="m"><i>f</i>(<i>x</i>) + <i>h</i>(<i>x</i>)</span> with <span class="m"><i>f</i></span> differentiable and <span class="m"><i>h</i></span> possibly not, take a gradient step on <span class="m"><i>f</i></span> and then apply the prox operator of <span class="m"><i>h</i></span>.</p>
+  <div class="bench">
+    <div class="card">
+      <h3>Subgradient descent against proximal gradient</h3>
+      <canvas id="pxCv" class="sq click" tabindex="0" role="img" aria-label="Contours of f plus h with two optimization paths. Click to move the starting point."></canvas>
+      <div class="legend"><span><i style="background:var(--alt)"></i>subgradient descent, γ<sub>t</sub> = 2/(2+t)</span><span><i style="background:var(--path)"></i>proximal gradient, γ = 0.1</span></div>
+      <div class="controls">
+        <label class="ctl"><span>objective</span>
+          <select id="pxEx"><option value="slide">f = x₁² + x₂²,  h = |x₁| + |x₂|</option><option value="sparse">f = (x₁−3)² + (x₂−0.3)²,  h = |x₁| + |x₂|</option></select></label>
+        <div class="btns"><button class="pri" id="pxStep">Step both</button><button id="pxRun">Run 40 steps</button><button id="pxReset">Reset</button></div>
+      </div>
+      <p class="note">Click the plot to choose a different start.</p>
+      <dl class="read" style="margin-top:10px">
+        <div><dt>t</dt><dd id="pxT"></dd></div>
+        <div><dt>subgradient x<sub>t</sub></dt><dd id="pxS"></dd></div>
+        <div><dt>proximal x<sub>t</sub></dt><dd id="pxP"></dd></div>
+      </dl>
+    </div>
+    <div class="stack">
+      <div class="card">
+        <h3>Rule</h3>
+        <div class="eq">prox<sub><i>γ</i></sub>(<i>x</i>) = argmin<sub><i>z</i></sub> (1/2<i>γ</i>)‖<i>z</i> − <i>x</i>‖<sub>2</sub><sup>2</sup> + <i>h</i>(<i>z</i>)<br><i>x</i><sup>(<i>t</i>+1)</sup> = prox<sub><i>γ</i></sub>(<i>x</i><sup>(<i>t</i>)</sup> − <i>γ</i>∇<i>f</i>(<i>x</i><sup>(<i>t</i>)</sup>))</div>
+      </div>
+      <div class="card">
+        <h3>The prox operator, one coordinate</h3>
+        <canvas id="stCv" class="wide" role="img" aria-label="Soft-thresholding function"></canvas>
+        <div class="legend"><span><i style="background:var(--path)"></i>h = λ|z|: soft threshold</span><span><i style="background:var(--alt)"></i>h = (λ/2)z²: shrink by 1/(1+γλ)</span><span><i style="background:var(--muted)"></i>dashed: h = 0, prox(x) = x</span></div>
+        <div class="controls">
+          <label class="ctl"><span>γλ = <b id="stKo"></b></span><input type="range" id="stK" min="0" max="2" step="0.1" value="0.5"></label>
+          <label class="ctl"><span>input x = <b id="stXo"></b></span><input type="range" id="stX" min="-3" max="3" step="0.1" value="1.5"></label>
+        </div>
+        <dl class="read" style="margin-top:10px">
+          <div><dt>ℓ₁ prox of x</dt><dd id="stL1"></dd></div>
+          <div><dt>squared ℓ₂ prox of x</dt><dd id="stL2"></dd></div>
+        </dl>
+      </div>
+      <div class="card">
+        <h3>Try this</h3>
+        <ol class="try">
+          <li>Run 40 steps on either objective. Which method has a coordinate that is exactly 0, and which only hovers near 0?</li>
+          <li>On the second objective the minimizer is (2.5, 0). Explain from the soft-threshold plot why x₂ lands on 0 and x₁ does not.</li>
+          <li>In the one-coordinate plot, set γλ = 0. Both curves fall on the dashed line: with h = 0, proximal gradient is plain gradient descent.</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+  <h3>Practice</h3>
+  <div class="checks" data-checks="px1,px2,px3"></div>
+</section>
+</div>
+
+<script>
+"use strict";
+const $=(s,r=document)=>r.querySelector(s), $$=(s,r=document)=>[...r.querySelectorAll(s)];
+const T={};
+function readTheme(){const cs=getComputedStyle(document.documentElement);
+  ['bg','surface','ink','muted','line','accent','path','alt','good','bad','band-lo','band-hi'].forEach(k=>T[k]=cs.getPropertyValue('--'+k).trim());}
+const rgb=h=>[1,3,5].map(i=>parseInt(h.slice(i,i+2),16));
+const fmt=(v,d=3)=>{if(!isFinite(v))return '∞';const s=v.toFixed(d);return (+s===0?(0).toFixed(d):s).replace('-','−');};
+const pt=(p,d=3)=>'('+fmt(p[0],d)+', '+fmt(p[1],d)+')';
+const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ---------- plotting helpers ---------- */
+function plot(cv,xr,yr,pad){
+  const W=cv.clientWidth,H=cv.clientHeight; if(!W||!H) return null;
+  const d=window.devicePixelRatio||1; cv.width=Math.round(W*d); cv.height=Math.round(H*d);
+  const c=cv.getContext('2d'); c.setTransform(d,0,0,d,0,0);
+  const p=Object.assign({l:36,r:10,t:10,b:24},pad||{});
+  const pw=W-p.l-p.r, ph=H-p.t-p.b;
+  c.fillStyle=T.surface; c.fillRect(0,0,W,H);
+  return {c,W,H,p,pw,ph,xr,yr,
+    sx:x=>p.l+(x-xr[0])/(xr[1]-xr[0])*pw, sy:y=>p.t+ph-(y-yr[0])/(yr[1]-yr[0])*ph,
+    ix:px=>xr[0]+(px-p.l)/pw*(xr[1]-xr[0]), iy:py=>yr[0]+(p.t+ph-py)/ph*(yr[1]-yr[0])};
+}
+function axes(P,xt,yt,grid=true){
+  const c=P.c; c.font='11px "IBM Plex Mono",monospace'; c.fillStyle=T.muted; c.strokeStyle=T.line; c.lineWidth=1;
+  c.textAlign='center'; c.textBaseline='top';
+  xt.forEach(x=>{const X=Math.round(P.sx(x))+.5; if(grid){c.beginPath();c.moveTo(X,P.p.t);c.lineTo(X,P.p.t+P.ph);c.stroke();} c.fillText(String(x).replace('-','−'),X,P.p.t+P.ph+6);});
+  c.textAlign='right'; c.textBaseline='middle';
+  yt.forEach(y=>{const Y=Math.round(P.sy(y))+.5; if(grid){c.beginPath();c.moveTo(P.p.l,Y);c.lineTo(P.p.l+P.pw,Y);c.stroke();} c.fillText(String(y).replace('-','−'),P.p.l-6,Y);});
+  c.strokeStyle=T.muted; c.strokeRect(P.p.l+.5,P.p.t+.5,P.pw-1,P.ph-1);
+}
+function clip(P,fn){const c=P.c;c.save();c.beginPath();c.rect(P.p.l,P.p.t,P.pw,P.ph);c.clip();fn();c.restore();}
+function heat(P,cv,id,f,levels){
+  const key=[id,Math.round(P.pw),Math.round(P.ph),T['band-lo'],T['band-hi']].join();
+  if(!cv._h||cv._h.key!==key){
+    const n=Math.max(40,Math.min(Math.round(P.pw),320)), m=Math.max(40,Math.round(n*P.ph/P.pw));
+    const o=document.createElement('canvas'); o.width=n;o.height=m; const oc=o.getContext('2d'), im=oc.createImageData(n,m);
+    const lo=rgb(T['band-lo']),hi=rgb(T['band-hi']), L=levels.length;
+    for(let j=0;j<m;j++)for(let i=0;i<n;i++){
+      const x=P.xr[0]+(i+.5)/n*(P.xr[1]-P.xr[0]), y=P.yr[1]-(j+.5)/m*(P.yr[1]-P.yr[0]);
+      const v=f(x,y); let k=0; while(k<L&&v>levels[k])k++; const u=k/L, q=(j*n+i)*4;
+      for(let a=0;a<3;a++) im.data[q+a]=lo[a]+(hi[a]-lo[a])*u; im.data[q+3]=255;}
+    oc.putImageData(im,0,0); cv._h={key,o};
+  }
+  P.c.imageSmoothingEnabled=true; P.c.drawImage(cv._h.o,P.p.l,P.p.t,P.pw,P.ph);
+}
+function curve(P,f,color,w=2,dash){const c=P.c;c.beginPath();const n=240;
+  for(let i=0;i<=n;i++){const x=P.xr[0]+i/n*(P.xr[1]-P.xr[0]);const X=P.sx(x),Y=P.sy(f(x));i?c.lineTo(X,Y):c.moveTo(X,Y);}
+  c.strokeStyle=color;c.lineWidth=w;c.setLineDash(dash||[]);c.stroke();c.setLineDash([]);}
+function dot(P,x,y,r,fill,stroke,lw=1.5){const c=P.c;c.beginPath();c.arc(P.sx(x),P.sy(y),r,0,7);if(fill){c.fillStyle=fill;c.fill();}if(stroke){c.strokeStyle=stroke;c.lineWidth=lw;c.stroke();}}
+function path(P,pts,color,w=2){if(!pts.length)return;const c=P.c;
+  const big=1e4, cl=v=>Math.max(-big,Math.min(big,v));
+  c.beginPath();pts.forEach((p,i)=>{const X=cl(P.sx(p[0])),Y=cl(P.sy(p[1]));i?c.lineTo(X,Y):c.moveTo(X,Y);});
+  c.strokeStyle=T.surface;c.lineWidth=w+2.5;c.lineJoin='round';c.stroke();
+  c.strokeStyle=color;c.lineWidth=w;c.stroke();
+  pts.forEach((p,i)=>{const last=i===pts.length-1;c.beginPath();c.arc(cl(P.sx(p[0])),cl(P.sy(p[1])),last?5:2.6,0,7);c.fillStyle=color;c.fill();if(last||i===0){c.strokeStyle=T.surface;c.lineWidth=1.5;c.stroke();}});}
+function seg(P,a,b,color,w=1.5,dash){const c=P.c;c.beginPath();c.moveTo(P.sx(a[0]),P.sy(a[1]));c.lineTo(P.sx(b[0]),P.sy(b[1]));c.strokeStyle=color;c.lineWidth=w;c.setLineDash(dash||[]);c.stroke();c.setLineDash([]);}
+function arrow(P,a,b,color){const c=P.c,x0=P.sx(a[0]),y0=P.sy(a[1]),x1=P.sx(b[0]),y1=P.sy(b[1]);const an=Math.atan2(y1-y0,x1-x0);
+  c.strokeStyle=T.surface;c.lineWidth=5;c.beginPath();c.moveTo(x0,y0);c.lineTo(x1,y1);c.stroke();
+  c.strokeStyle=color;c.fillStyle=color;c.lineWidth=2.5;c.beginPath();c.moveTo(x0,y0);c.lineTo(x1,y1);c.stroke();
+  c.beginPath();c.moveTo(x1,y1);c.lineTo(x1-10*Math.cos(an-.4),y1-10*Math.sin(an-.4));c.lineTo(x1-10*Math.cos(an+.4),y1-10*Math.sin(an+.4));c.closePath();c.fill();}
+function label(P,x,y,text,dx=8,dy=-8,color){const c=P.c;c.font='500 12px "IBM Plex Mono",monospace';c.textAlign=dx<0?'right':'left';c.textBaseline='middle';
+  const X=P.sx(x)+dx,Y=P.sy(y)+dy;c.lineWidth=3.5;c.strokeStyle=T.surface;c.lineJoin='round';c.strokeText(text,X,Y);c.fillStyle=color||T.ink;c.fillText(text,X,Y);}
+function evPt(cv,e,P){const r=cv.getBoundingClientRect();return [P.ix(e.clientX-r.left),P.iy(e.clientY-r.top),e.clientX-r.left,e.clientY-r.top];}
+function slider(id,cb,d=2){const el=$('#'+id),o=$('#'+id+'o');const f=()=>{if(o)o.textContent=fmt(+el.value,d);cb(+el.value);};el.addEventListener('input',f);if(o)o.textContent=fmt(+el.value,d);return el;}
+function setSlider(id,v,d=2){const el=$('#'+id);el.value=v;const o=$('#'+id+'o');if(o)o.textContent=fmt(+v,d);}
+let timer=null; function stopRun(){if(timer){clearInterval(timer);timer=null;}}
+function run(n,step,draw){stopRun(); if(reduce){for(let i=0;i<n;i++)if(step()===false)break;draw();return;}
+  let i=0; timer=setInterval(()=>{const r=step();draw();if(++i>=n||r===false)stopRun();},90);}
+
+/* ===================== LINE SEARCH ===================== */
+const LS={x:-4,t:0,evals:0,hist:[-4],trials:[],from:null,a:.2,b:.6};
+const lsf=x=>x*x, lsg=x=>2*x;
+function lsReset(){stopRun();Object.assign(LS,{x:-4,t:0,evals:0,hist:[-4],trials:[],from:null});lsDraw();}
+function lsStep(){const x=LS.x,g=lsg(x); if(Math.abs(g)<1e-7) return false;
+  let gam=1;const tr=[]; for(;;){const xn=x-gam*g,lhs=lsf(xn),rhs=lsf(x)-LS.a*gam*g*g,ok=!(lhs>rhs);tr.push({gam,xn,lhs,rhs,ok});LS.evals++;if(ok||tr.length>600)break;gam*=LS.b;}
+  LS.trials=tr;LS.from=x;LS.x=tr[tr.length-1].xn;LS.hist.push(LS.x);LS.t++;}
+function lsDraw(){
+  const P=plot($('#lsCv'),[-4.4,4.4],[-1.5,17.5]); if(!P)return;
+  axes(P,[-4,-2,0,2,4],[0,4,8,12,16]);
+  clip(P,()=>{
+    curve(P,lsf,T.accent,2.5);
+    if(LS.from!==null){const x0=LS.from,g=lsg(x0),x1=x0-g;
+      seg(P,[x0,lsf(x0)],[x1,lsf(x0)-LS.a*g*g],T.muted,1.5,[5,4]);
+      LS.trials.forEach(r=>{if(!r.ok)dot(P,r.xn,r.lhs,4,T.surface,T.bad,2);});
+      dot(P,x0,lsf(x0),4,T.surface,T.path,2);
+    }
+    LS.hist.slice(0,-1).forEach(x=>dot(P,x,lsf(x),2.5,T.path));
+    dot(P,LS.x,lsf(LS.x),5.5,T.path,T.surface);
+  });
+  label(P,LS.x,lsf(LS.x),'x'+String(LS.t).replace(/\d/g,d=>'₀₁₂₃₄₅₆₇₈₉'[d]),LS.x>2?-10:10,-12);
+  $('#lsT').textContent=LS.t;$('#lsX').textContent=fmt(LS.x,4);$('#lsF').textContent=fmt(lsf(LS.x),5);$('#lsE').textContent=LS.evals;
+  const tb=$('#lsTbl tbody'),tr=LS.trials,show=tr.slice(-8);
+  tb.innerHTML=show.map(r=>`<tr class="${r.ok?'ok':'no'}"><td>${fmt(r.gam,4)}</td><td>${fmt(r.lhs,3)}</td><td>${fmt(r.rhs,3)}</td><td>${r.ok?'accept':'shrink'}</td></tr>`).join('');
+  $('#lsNote').textContent=!tr.length?'Press “Take one step” to see every step size that was tried.':
+    (Math.abs(lsg(LS.x))<1e-7?'The gradient is zero. Reset to run again.':`${tr.length} step size${tr.length>1?'s':''} tried`+(tr.length>8?', last 8 shown':'')+`. Accepted γ = ${fmt(tr[tr.length-1].gam,4)}.`);
+}
+function lsInit(){
+  slider('lsA',v=>{LS.a=v;lsDraw();}); slider('lsB',v=>{LS.b=v;lsDraw();});
+  $('#lsStep').onclick=()=>{lsStep();lsDraw();}; $('#lsReset').onclick=lsReset;
+  const preset=(a,b)=>()=>{LS.a=a;LS.b=b;setSlider('lsA',a);setSlider('lsB',b);lsReset();};
+  $('#lsP1').onclick=preset(.2,.99); $('#lsP2').onclick=preset(.1,.3);
+}
+
+/* ===================== SUBGRADIENT ===================== */
+const SU={x0:0,s:.5}, SD={x:4,t:0,fx:[4],best:[4],rule:'fixed',g:.9,a:2,b:0};
+function suDraw(){
+  const P=plot($('#suCv'),[-4,4],[-1.5,4.5]); if(!P)return;
+  axes(P,[-4,-2,0,2,4],[-1,0,1,2,3,4]);
+  const {x0,s}=SU, y0=Math.abs(x0), l=x=>y0+s*(x-x0);
+  const ok=(x0>0&&s===1)||(x0<0&&s===-1)||(x0===0&&Math.abs(s)<=1);
+  clip(P,()=>{
+    curve(P,Math.abs,T.accent,2.5);
+    curve(P,l,ok?T.good:T.bad,2);
+    if(!ok){const c=P.c;c.fillStyle=T.bad;c.globalAlpha=.18;c.beginPath();const n=200;let open=false;
+      for(let i=0;i<=n;i++){const x=-4+8*i/n; if(l(x)>Math.abs(x)+1e-9){c.rect(P.sx(x)-P.pw/n/2,P.sy(l(x)),P.pw/n+.5,P.sy(Math.abs(x))-P.sy(l(x)));}}
+      c.fill();c.globalAlpha=1;}
+    dot(P,x0,y0,5.5,T.ink,T.surface);
+  });
+  const m=$('#suMsg'); m.className='fb '+(ok?'good':'bad');
+  const set=x0>0?'{1}':x0<0?'{−1}':'[−1, 1]';
+  m.innerHTML=ok?`Yes. The line stays on or below |x| everywhere, so ${fmt(s,2)} is a subgradient at x₀ = ${fmt(x0,1)}.`+(s===0?' A zero subgradient means x₀ is a global minimum.':''):
+    `No. The line rises above |x| in the shaded region. The set of subgradients at x₀ = ${fmt(x0,1)} is ${set}.`;
+}
+function sdGamma(t){return SD.rule==='fixed'?SD.g:SD.rule==='abt'?SD.a/(SD.b+t):SD.a/Math.sqrt(t);}
+function sdReset(){stopRun();Object.assign(SD,{x:4,t:0,fx:[4],best:[4]});sdDraw();}
+function sdStep(){const s=Math.sign(SD.x); if(s===0)return false; SD.t++; SD.x-=sdGamma(SD.t)*s; const f=Math.abs(SD.x);SD.fx.push(f);SD.best.push(Math.min(f,SD.best[SD.best.length-1]));}
+function sdDraw(){
+  const n=Math.max(60,SD.t), P=plot($('#sdCv'),[0,n],[0,4.2]); if(!P)return;
+  axes(P,[0,n/4,n/2,3*n/4,n].map(Math.round),[0,1,2,3,4]);
+  clip(P,()=>{
+    const line=(arr,col,w)=>{const c=P.c;c.beginPath();arr.forEach((v,i)=>{const X=P.sx(i),Y=P.sy(v);i?c.lineTo(X,Y):c.moveTo(X,Y);});c.strokeStyle=col;c.lineWidth=w;c.stroke();};
+    line(SD.fx,T.path,1.5); line(SD.best,T.accent,2.5);
+    dot(P,SD.t,SD.fx[SD.t],3.5,T.path,T.surface);
+  });
+  $('#sdT').textContent=SD.t;$('#sdX').textContent=fmt(SD.x,4);$('#sdF').textContent=fmt(SD.best[SD.best.length-1],4);
+  $('#sdGw').hidden=SD.rule!=='fixed'; $('#sdAw').hidden=SD.rule==='fixed'; $('#sdBw').hidden=SD.rule!=='abt';
+}
+function suInit(){
+  slider('suX',v=>{SU.x0=v;suDraw();},1); slider('suS',v=>{SU.s=v;suDraw();});
+  slider('sdG',v=>{SD.g=v;sdReset();},1); slider('sdA',v=>{SD.a=v;sdReset();},1); slider('sdB',v=>{SD.b=v;sdReset();},0);
+  $('#sdRule').onchange=e=>{SD.rule=e.target.value;sdReset();};
+  $('#sdStep').onclick=()=>{sdStep();sdDraw();}; $('#sdRun').onclick=()=>run(60,sdStep,sdDraw); $('#sdReset').onclick=sdReset;
+}
+
+/* ===================== PROJECTED GD ===================== */
+const PG={f:(x,y)=>(x-2)**2-(x-2)*(y-2)+.5*(y-2)**2, grad:(x,y)=>[2*(x-2)-(y-2),-(x-2)+(y-2)],
+  proj:{none:p=>p, orth:p=>[Math.min(p[0],0),Math.min(p[1],0)], ball:p=>{const n=Math.hypot(p[0],p[1]);return n<=1?p:[p[0]/n,p[1]/n];}},
+  C:'orth',gam:.1,start:[-5,-2],x:[-5,-2],hist:[[-5,-2]],pre:null,t:0,P:null};
+function pgReset(s){stopRun();if(s)PG.start=s;PG.x=PG.proj[PG.C](PG.start);PG.hist=[PG.x];PG.pre=null;PG.t=0;pgDraw();}
+function pgStep(){const [x,y]=PG.x,g=PG.grad(x,y),pre=[x-PG.gam*g[0],y-PG.gam*g[1]];
+  if(!isFinite(pre[0])||Math.hypot(pre[0],pre[1])>1e6)return false;
+  const nx=PG.proj[PG.C](pre); PG.pre=(nx[0]!==pre[0]||nx[1]!==pre[1])?pre:null; PG.prev=PG.x; PG.x=nx; PG.hist.push(nx); PG.t++;
+  if(Math.hypot(nx[0]-x,nx[1]-y)<1e-7)return false;}
+function pgDraw(){
+  const cv=$('#pgCv'),P=plot(cv,[-5,5],[-5,5]); if(!P)return; PG.P=P;
+  heat(P,cv,'pg',PG.f,[.5,2,5,10,18,30,45,65]);
+  axes(P,[-4,-2,0,2,4],[-4,-2,0,2,4],false);
+  clip(P,()=>{const c=P.c;
+    if(PG.C!=='none'){c.beginPath();
+      if(PG.C==='orth')c.rect(P.sx(-5)-2,P.sy(0),P.sx(0)-P.sx(-5)+2,P.sy(-5)-P.sy(0)+2);else c.arc(P.sx(0),P.sy(0),P.sx(1)-P.sx(0),0,7);
+      c.fillStyle=T.ink;c.globalAlpha=.16;c.fill();c.globalAlpha=1;c.setLineDash([6,4]);c.strokeStyle=T.ink;c.lineWidth=1.5;c.stroke();c.setLineDash([]);}
+    dot(P,2,2,3,T.surface,T.ink);
+    if(PG.pre){seg(P,PG.prev,PG.pre,T.path,1.5,[3,3]);seg(P,PG.pre,PG.x,T.ink,1.5,[3,3]);dot(P,PG.pre[0],PG.pre[1],4.5,T.surface,T.path,2);}
+    path(P,PG.hist,T.path);
+  });
+  label(P,2,2,'unconstrained min',-8,-12);
+  $('#pgT').textContent=PG.t;$('#pgX').textContent=pt(PG.x);$('#pgF').textContent=fmt(PG.f(...PG.x),4);
+  $('#pgO').innerHTML=PG.t===0?'–':PG.pre?'yes, projected':'no';
+}
+function pgInit(){
+  slider('pgG',v=>{PG.gam=v;});
+  $('#pgC').onchange=e=>{PG.C=e.target.value;pgReset();};
+  $('#pgStep').onclick=()=>{pgStep();pgDraw();}; $('#pgRun').onclick=()=>run(40,pgStep,pgDraw); $('#pgReset').onclick=()=>pgReset([-5,-2]);
+  $('#pgCv').addEventListener('click',e=>{if(!PG.P)return;const q=evPt(e.currentTarget,e,PG.P);pgReset([Math.max(-5,Math.min(5,q[0])),Math.max(-5,Math.min(5,q[1]))]);});
+}
+
+/* ===================== FRANK-WOLFE ===================== */
+const FW={V:[[0,0],[1,0],[0,1]],f:(x,y)=>(x-.25)**2+(y-.25)**2,grad:(x,y)=>[2*(x-.25),2*(y-.25)],
+  x:[.1,.7],t:1,hist:[[.1,.7]],s:null,rule:'dim',reveal:false,streak:0,P:null};
+const fwDots=()=>{const g=FW.grad(...FW.x);return FW.V.map(v=>g[0]*v[0]+g[1]*v[1]);};
+const fwBest=()=>{const d=fwDots();let b=0;d.forEach((v,i)=>{if(v<d[b]-1e-12)b=i;});return b;};
+const fwGam=()=>FW.rule==='dim'?2/(2+FW.t):FW.rule==='one'?1:.5;
+function fwReset(){Object.assign(FW,{x:[.1,.7],t:1,hist:[[.1,.7]],s:null,reveal:false});fwMsg('Predict s<sub>t</sub>: click the vertex that minimizes ∇f(x<sub>t</sub>)ᵀs.','');fwDraw();}
+function fwMsg(h,cls){const m=$('#fwMsg');m.className='fb '+cls;m.innerHTML=h;}
+function fwApply(){const b=fwBest(),s=FW.V[b],g=fwGam();FW.s=b;FW.x=[FW.x[0]+g*(s[0]-FW.x[0]),FW.x[1]+g*(s[1]-FW.x[1])];FW.hist.push(FW.x);FW.t++;FW.reveal=false;}
+function fwGuess(i){const b=fwBest(),d=fwDots();
+  if(i===b){FW.streak++;const g=fwGam();fwApply();fwMsg(`Correct. s = (${FW.V[b]}) gives the smallest value, ${fmt(d[b],3)}. Moved with γ = ${fmt(g,3)}. Predict the next one.`,'good');
+    if(FW.streak>=3)solve('fw1',`Three in a row. The rule is: pick the vertex with the smallest ∇f(x<sub>t</sub>)ᵀs.`);}
+  else{FW.streak=0;FW.reveal=true;fwMsg(`Not that one. ∇fᵀs at (${FW.V[i]}) is ${fmt(d[i],3)}; another vertex is smaller. The table now shows all three. Try again.`,'bad');}
+  fwDraw();}
+function fwDraw(){
+  const cv=$('#fwCv'),P=plot(cv,[-.18,1.18],[-.18,1.18]); if(!P)return; FW.P=P;
+  heat(P,cv,'fw',FW.f,[.01,.04,.09,.16,.28,.45,.7,1]);
+  axes(P,[0,.25,.5,.75,1],[0,.25,.5,.75,1],false);
+  const g=FW.grad(...FW.x), prev=FW.hist[FW.hist.length-2];
+  clip(P,()=>{const c=P.c;
+    c.beginPath();FW.V.forEach((v,i)=>i?c.lineTo(P.sx(v[0]),P.sy(v[1])):c.moveTo(P.sx(v[0]),P.sy(v[1])));c.closePath();
+    c.fillStyle=T.ink;c.globalAlpha=.14;c.fill();c.globalAlpha=1;c.strokeStyle=T.ink;c.lineWidth=1.5;c.setLineDash([6,4]);c.stroke();c.setLineDash([]);
+    dot(P,.25,.25,3,T.surface,T.ink);
+    if(FW.s!==null&&prev)seg(P,prev,FW.V[FW.s],T.ink,1.5,[3,3]);
+    path(P,FW.hist,T.path);
+    const n=Math.hypot(g[0],g[1]); if(n>1e-9){const L=Math.min(.22,n*.25);arrow(P,FW.x,[FW.x[0]-g[0]/n*L,FW.x[1]-g[1]/n*L],T.accent);}
+    FW.V.forEach((v,i)=>{dot(P,v[0],v[1],7,T.surface,T.ink,2);if(i===FW.s)dot(P,v[0],v[1],12,null,T.path,2.5);});
+  });
+  label(P,0,0,'(0,0)',-12,14);label(P,1,0,'(1,0)',10,14);label(P,0,1,'(0,1)',12,-10);
+  $('#fwT').textContent=FW.t;$('#fwX').textContent=pt(FW.x);$('#fwG').textContent=pt(g);$('#fwF').textContent=fmt(FW.f(...FW.x),4);
+  const d=fwDots(),b=fwBest(),s=FW.V[b];
+  $('#fwGap').textContent=FW.reveal||FW.t>1?fmt(g[0]*(FW.x[0]-s[0])+g[1]*(FW.x[1]-s[1]),4):'hidden';
+  $('#fwGam').textContent=fmt(fwGam(),3);
+  $('#fwTbl tbody').innerHTML=FW.V.map((v,i)=>`<tr class="${FW.reveal&&i===b?'ok':''}"><td>(${v[0]}, ${v[1]})</td><td>${FW.reveal?fmt(d[i],3):'?'}</td></tr>`).join('');
+}
+function fwInit(){
+  $('#fwRule').onchange=e=>{FW.rule=e.target.value;fwReset();};
+  $('#fwAuto').onclick=()=>{const b=fwBest(),d=fwDots(),g=fwGam();FW.streak=0;fwApply();fwMsg(`Stepped toward s = (${FW.V[b]}) where ∇fᵀs = ${fmt(d[b],3)}, with γ = ${fmt(g,3)}.`,'');fwDraw();};
+  $('#fwReset').onclick=fwReset;
+  $('#fwCv').addEventListener('click',e=>{if(!FW.P)return;const q=evPt(e.currentTarget,e,FW.P);let hit=-1;
+    FW.V.forEach((v,i)=>{if(Math.hypot(FW.P.sx(v[0])-q[2],FW.P.sy(v[1])-q[3])<26)hit=i;});
+    if(hit>=0)fwGuess(hit);else fwMsg('Click on one of the three vertices of the triangle.','');});
+}
+
+/* ===================== SGD ===================== */
+function rng(a){return()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+const SG=(()=>{const r=rng(11),N=40,X=[],Y=[];for(let i=0;i<N;i++){const x=-2+4*r();X.push(x);Y.push(1.5*x+.5+1.4*(r()+r()+r()-1.5));}
+  return {N,X,Y,B:1,al:.1,w:[-1.5,2.5],hist:[[-1.5,2.5]],t:0,evals:0,batch:[]};})();
+const sgLoss=(w,b)=>{let s=0;for(let i=0;i<SG.N;i++){const e=w*SG.X[i]+b-SG.Y[i];s+=e*e;}return s/SG.N;};
+function sgGrad(w,b,idx){let gw=0,gb=0;idx.forEach(i=>{const e=w*SG.X[i]+b-SG.Y[i];gw+=2*e*SG.X[i];gb+=2*e;});return [gw/idx.length,gb/idx.length];}
+function sgSample(B,r){const a=[...Array(SG.N).keys()];for(let i=0;i<B;i++){const j=i+Math.floor(r()*(SG.N-i));[a[i],a[j]]=[a[j],a[i]];}return a.slice(0,B);}
+const sgAll=[...Array(40).keys()];
+function sgReset(){stopRun();Object.assign(SG,{w:[-1.5,2.5],hist:[[-1.5,2.5]],t:0,evals:0,batch:[]});sgDraw();}
+function sgStep(){const idx=sgSample(SG.B,Math.random),g=sgGrad(SG.w[0],SG.w[1],idx);SG.batch=idx;SG.w=[SG.w[0]-SG.al*g[0],SG.w[1]-SG.al*g[1]];SG.hist.push(SG.w);SG.t++;SG.evals+=SG.B;if(!isFinite(SG.w[0])||Math.abs(SG.w[0])>1e6)return false;}
+function sgDraw(){
+  const cv=$('#sgCv'),P=plot(cv,[-2.5,3.5],[-2.5,3.5]); if(!P)return;
+  heat(P,cv,'sg',sgLoss,[.75,1.2,2,3.5,6,9,13,19]);
+  axes(P,[-2,-1,0,1,2,3],[-2,-1,0,1,2,3],false);
+  clip(P,()=>{const c=P.c,[w,b]=SG.w,r=rng(1000+SG.t*7+SG.B);
+    c.fillStyle=T.surface;c.globalAlpha=.75;
+    for(let k=0;k<40;k++){const g=sgGrad(w,b,sgSample(SG.B,r));c.beginPath();c.arc(P.sx(w-SG.al*g[0]),P.sy(b-SG.al*g[1]),2.6,0,7);c.fill();}
+    c.globalAlpha=1;
+    const G=sgGrad(w,b,sgAll);dot(P,w-SG.al*G[0],b-SG.al*G[1],7,null,T.ink,2);
+    path(P,SG.hist,T.path,1.5);
+  });
+  const c=P.c;c.font='11px "IBM Plex Mono",monospace';c.fillStyle=T.muted;c.textAlign='right';c.textBaseline='bottom';c.fillText('w →',P.p.l+P.pw-6,P.p.t+P.ph-5);c.textAlign='left';c.textBaseline='top';c.save();c.fillStyle=T.ink;c.fillText('b ↑',P.p.l+6,P.p.t+6);c.restore();
+  $('#sgT').textContent=SG.t;$('#sgE').textContent=SG.evals;$('#sgW').textContent=pt(SG.w,2);$('#sgL').textContent=fmt(sgLoss(...SG.w),4);
+  const D=plot($('#sgData'),[-2.2,2.2],[-5,5]); if(!D)return;
+  axes(D,[-2,-1,0,1,2],[-4,-2,0,2,4]);
+  clip(D,()=>{const inB=new Set(SG.batch);
+    for(let i=0;i<SG.N;i++)if(!inB.has(i))dot(D,SG.X[i],SG.Y[i],3,T.muted);
+    curve(D,x=>SG.w[0]*x+SG.w[1],T.accent,2.5);
+    SG.batch.forEach(i=>dot(D,SG.X[i],SG.Y[i],4.5,T.path,T.surface));});
+}
+function sgInit(){
+  slider('sgB',v=>{SG.B=v;sgDraw();},0); slider('sgA',v=>{SG.al=v;sgDraw();});
+  $('#sgStep').onclick=()=>{sgStep();sgDraw();}; $('#sgRun').onclick=()=>run(60,sgStep,sgDraw); $('#sgReset').onclick=sgReset;
+}
+
+/* ===================== PROXIMAL ===================== */
+const soft=(x,k)=>x>k?x-k:x<-k?x+k:0;
+const PX={ex:'slide',c:{slide:[0,0],sparse:[3,.3]},lev:{slide:[1,3,6,10,16,24,34,46],sparse:[3.2,4,6,10,16,26,40,60]},
+  start:[4,3],s:[4,3],p:[4,3],hs:[[4,3]],hp:[[4,3]],t:0,P:null}, ST={k:.5,x:1.5};
+const pxF=(x,y)=>{const c=PX.c[PX.ex];return (x-c[0])**2+(y-c[1])**2+Math.abs(x)+Math.abs(y);};
+function pxReset(s){stopRun();if(s)PX.start=s;PX.s=PX.start;PX.p=PX.start;PX.hs=[PX.start];PX.hp=[PX.start];PX.t=0;pxDraw();}
+function pxStep(){const c=PX.c[PX.ex];PX.t++;const gt=2/(2+PX.t),gm=.1;
+  PX.s=PX.s.map((v,i)=>v-gt*(2*(v-c[i])+Math.sign(v)));
+  PX.p=PX.p.map((v,i)=>soft(v-gm*2*(v-c[i]),gm));
+  PX.hs.push(PX.s);PX.hp.push(PX.p);}
+function pxDraw(){
+  const cv=$('#pxCv'),P=plot(cv,[-5,5],[-5,5]); if(!P)return; PX.P=P;
+  heat(P,cv,'px'+PX.ex,pxF,PX.lev[PX.ex]);
+  axes(P,[-4,-2,0,2,4],[-4,-2,0,2,4],false);
+  clip(P,()=>{seg(P,[-5,0],[5,0],T.ink,.75,[2,4]);seg(P,[0,-5],[0,5],T.ink,.75,[2,4]);path(P,PX.hs,T.alt,1.5);path(P,PX.hp,T.path,2);});
+  const tag=p=>pt(p,4)+(PX.t>0&&p.some(v=>v===0)?'<span class="tag good">exact 0</span>':'');
+  $('#pxT').textContent=PX.t;$('#pxS').innerHTML=tag(PX.s);$('#pxP').innerHTML=tag(PX.p);
+  const S=plot($('#stCv'),[-3,3],[-3,3]); if(!S)return;
+  axes(S,[-3,-2,-1,0,1,2,3],[-3,-2,-1,0,1,2,3]);
+  clip(S,()=>{curve(S,x=>x,T.muted,1.5,[5,4]);curve(S,x=>x/(1+ST.k),T.alt,2);curve(S,x=>soft(x,ST.k),T.path,2.5);
+    seg(S,[ST.x,-3],[ST.x,3],T.line,1);dot(S,ST.x,ST.x/(1+ST.k),4,T.alt,T.surface);dot(S,ST.x,soft(ST.x,ST.k),5,T.path,T.surface);
+    if(ST.k>0){seg(S,[-ST.k,-.12],[-ST.k,.12],T.ink,1.5);seg(S,[ST.k,-.12],[ST.k,.12],T.ink,1.5);}});
+  if(ST.k>0){label(S,ST.k,0,'γλ',-4,14);label(S,-ST.k,0,'−γλ',-4,14);}
+  $('#stL1').textContent=fmt(soft(ST.x,ST.k),3);$('#stL2').textContent=fmt(ST.x/(1+ST.k),3);
+}
+function pxInit(){
+  $('#pxEx').onchange=e=>{PX.ex=e.target.value;pxReset();};
+  $('#pxStep').onclick=()=>{pxStep();pxDraw();}; $('#pxRun').onclick=()=>run(40,pxStep,pxDraw); $('#pxReset').onclick=()=>pxReset([4,3]);
+  $('#pxCv').addEventListener('click',e=>{if(!PX.P)return;const q=evPt(e.currentTarget,e,PX.P);pxReset([Math.max(-5,Math.min(5,q[0])),Math.max(-5,Math.min(5,q[1]))]);});
+  slider('stK',v=>{ST.k=v;pxDraw();},1); slider('stX',v=>{ST.x=v;pxDraw();},1);
+}
+
+/* ===================== PRACTICE CHECKS ===================== */
+const CHECKS={
+ ls1:{q:'Backtracking on <span class="m"><i>f</i>(<i>x</i>) = <i>x</i><sup>2</sup></span> at <span class="m"><i>x<sub>t</sub></i> = −4</span> with <span class="m"><i>α</i> = .1, <i>β</i> = .3</span>. Work out the accepted step size and the next iterate by hand.',
+   num:[['accepted γ',.3,.006],['x<sub>t+1</sub>',-1.6,.02]],
+   why:'∇f = −8. Trial γ = 1 lands on x = 4: f = 16 &gt; 16 − .1·1·64 = 9.6, so shrink. Trial γ = .3 lands on x = −1.6: f = 2.56 ≤ 16 − .1·.3·64 = 14.08, so accept.'},
+ ls2:{q:'You increase <span class="m"><i>α</i></span> and keep <span class="m"><i>β</i></span> fixed. What happens to the acceptance test?',
+   mcq:['The threshold line tilts down toward the tangent, so fewer step sizes pass and the accepted γ can only get smaller or stay the same.','The threshold line flattens, so more step sizes pass.','Nothing changes: α only controls how fast γ shrinks.','The first trial changes from γ = 1 to γ = α.'],ans:0,
+   why:'The threshold is f(x) − αγ‖∇f‖². A larger α demands more decrease for every γ. How fast γ shrinks is β’s job.'},
+ sg1:{q:'Select every slope that is a subgradient of <span class="m">|<i>x</i>|</span> at <span class="m"><i>x</i> = 0</span>.',
+   multi:['−1.5','−1','0','0.4','1','2'],ans:[1,2,3,4],
+   why:'The set of subgradients at the kink is the interval [−1, 1], endpoints included.'},
+ sg2:{q:'Let <span class="m"><i>g</i>(<i>x</i>) = max(<i>x</i><sup>2</sup>, 2<i>x</i> + 3)</span>. Select every subgradient of <span class="m"><i>g</i></span> at <span class="m"><i>x</i> = 3</span>.',
+   multi:['0','2','4','6','7'],ans:[1,2,3],
+   why:'Both pieces equal 9 at x = 3. Their gradients are 6 and 2, and every convex combination of the two is also a subgradient: the interval [2, 6].'},
+ sg3:{q:'Slide 21 asks: can you use line search with subgradient descent?',
+   mcq:['Yes, exactly as before, because a subgradient is a gradient wherever it matters.','Not in general. A negative subgradient need not be a descent direction, so there may be no step size that decreases f.','Yes, but only exact line search.','No, because subgradients exist only for differentiable functions.'],ans:1,
+   why:'Backtracking relies on “a small enough step along −∇f decreases f”. That guarantee comes from differentiability. This is why the lecture turns to fixed and diminishing step size rules instead.'},
+ pg1:{q:'Project <span class="m"><i>y</i> = (1.5, −2, 0.3)</span> onto <span class="m"><i>C</i> = {<i>x</i> : <i>x</i> ≤ 0}</span>.',
+   num:[['x₁',0,.001],['x₂',-2,.001],['x₃',0,.001]],
+   why:'The projection acts on each coordinate: keep it if it is ≤ 0, otherwise set it to 0.'},
+ pg2:{q:'Project <span class="m"><i>y</i> = (3, 4)</span> onto <span class="m"><i>C</i> = {<i>x</i> : ‖<i>x</i>‖<sub>2</sub> ≤ 1}</span>.',
+   num:[['x₁',.6,.006],['x₂',.8,.006]],
+   why:'‖y‖₂ = 5 &gt; 1, so the projection is y / ‖y‖₂ = (3/5, 4/5).'},
+ pg3:{q:'One step of projected GD on the lab objective with <span class="m"><i>C</i> = {<i>x</i> ≤ 0, <i>y</i> ≤ 0}</span>, from <span class="m"><i>x<sub>t</sub></i> = (−0.5, −1)</span> with <span class="m"><i>γ</i> = 0.5</span>.',
+   num:[['x',0,.006],['y',-.75,.006]],
+   why:'∇f(−0.5, −1) = (2(−2.5) − (−3), 2.5 − 3) = (−2, −0.5). The gradient step gives (0.5, −0.75), which leaves C. Projecting clips the first coordinate to 0.'},
+ fw1:{q:'In the demo above, predict <span class="m"><i>s<sub>t</sub></i></span> by clicking a vertex. Three correct predictions in a row complete this check.',special:true,
+   why:'Compute ∇f(x<sub>t</sub>)ᵀs at each vertex and take the smallest.'},
+ fw2:{q:'At <span class="m"><i>x</i><sub>0</sub> = (.1, .7)</span> the gradient is <span class="m">(−.3, .9)</span> and <span class="m"><i>s</i> = (1, 0)</span>. Compute the stopping quantity <span class="m"><i>f</i><sub>0</sub>(<i>x<sub>t</sub></i>) − <i>g</i>(<i>s<sub>t</sub></i>)</span>, where <span class="m"><i>g</i></span> is the tangent plane at <span class="m"><i>x<sub>t</sub></i></span>.',
+   num:[['gap',.9,.006]],
+   why:'f₀(x<sub>t</sub>) − g(s<sub>t</sub>) = ∇f(x<sub>t</sub>)ᵀ(x<sub>t</sub> − s<sub>t</sub>) = (−.3)(.1 − 1) + (.9)(.7 − 0) = .27 + .63 = .9. The true suboptimality is f(x₀) − 0 = .225, which is below the bound as promised.'},
+ fw3:{q:'Why can Frank-Wolfe not be run on <span class="m"><i>C</i> = {<i>x</i> : <i>x</i> ≤ 0}</span>?',
+   mcq:['The projection onto C is too expensive.','C is not convex.','C is unbounded, so the linear subproblem min ∇fᵀx over C may have no minimizer.','The step size 2/(2+t) is not defined there.'],ans:2,
+   why:'A linear function can decrease forever on an unbounded set. The slides note the method only makes sense when that minimum exists, and list “bounded constraint sets only” as a disadvantage.'},
+ sgd1:{q:'In minibatch SGD with <span class="m"><i>N</i></span> training examples, which batch size recovers standard gradient descent?',
+   mcq:['B = 1','B = N','B = √N','None; SGD always differs because of sampling noise.'],ans:1,
+   why:'Sampling N examples without replacement uses every example once, so the estimate is the full-dataset gradient. B = 1 is single-example SGD.'},
+ sgd2:{q:'What does “the minibatch gradient is an unbiased estimate” guarantee?',
+   mcq:['Every minibatch gradient points in a descent direction.','The loss decreases at every update.','The expected value of the minibatch gradient equals the full-dataset gradient.','The estimate has zero variance once B &gt; 1.'],ans:2,
+   why:'Single steps can go the wrong way. Averaged over the random draw they point along the true gradient, which is why many noisy steps still make progress.'},
+ px1:{q:'For <span class="m"><i>h</i>(<i>z</i>) = <i>λ</i>‖<i>z</i>‖<sub>1</sub></span> with <span class="m"><i>γλ</i> = 0.5</span>, compute <span class="m">prox<sub><i>γ</i></sub>(<i>x</i>)</span> for <span class="m"><i>x</i> = (1.5, −0.2, 0.4)</span>.',
+   num:[['z₁',1,.006],['z₂',0,.001],['z₃',0,.001]],
+   why:'Soft thresholding: 1.5 &gt; 0.5 gives 1.5 − 0.5 = 1. The other two lie in [−0.5, 0.5] and are set to exactly 0.'},
+ px2:{q:'For <span class="m"><i>h</i>(<i>z</i>) = (<i>λ</i>/2)‖<i>z</i>‖<sub>2</sub><sup>2</sup></span> with <span class="m"><i>γ</i> = 0.5, <i>λ</i> = 2</span>, compute <span class="m">prox<sub><i>γ</i></sub>(4)</span>.',
+   num:[['z',2,.006]],
+   why:'Setting (1/γ)(z − x) + λz = 0 gives z = x / (1 + γλ) = 4 / 2 = 2. The squared ℓ₂ penalty shrinks every coordinate but never makes one exactly zero.'},
+ px3:{q:'Take <span class="m"><i>h</i></span> to be the indicator of a convex set <span class="m"><i>C</i></span> (0 inside, ∞ outside). Proximal gradient descent then becomes which algorithm?',
+   mcq:['Plain gradient descent','Subgradient descent','Projected gradient descent','Frank-Wolfe'],ans:2,
+   why:'The prox problem reduces to argmin over z ∈ C of ‖z − x‖², which is the projection onto C. With h = 0 it reduces to plain gradient descent.'}
+};
+let solved=new Set(); try{solved=new Set(JSON.parse(localStorage.getItem('gdlab-solved')||'[]').filter(k=>CHECKS[k]));}catch(e){}
+function save(){try{localStorage.setItem('gdlab-solved',JSON.stringify([...solved]));}catch(e){}}
+function parseNum(s){s=s.trim().replace(/−/g,'-').replace(/,/g,'.');if(!s)return NaN;const m=s.match(/^(-?\d*\.?\d+)\s*\/\s*(\d*\.?\d+)$/);return m?m[1]/m[2]:(/^-?\d*\.?\d+$/.test(s)?+s:NaN);}
+function solve(id,msg){const el=$('#c-'+id);solved.add(id);save();el.classList.add('solved');
+  const fb=$('.fb',el);fb.className='fb good';fb.innerHTML=msg||'Correct.';$('.why',el).hidden=false;tally();}
+function tally(){$('#score').textContent=solved.size;$('#total').textContent=Object.keys(CHECKS).length;
+  $$('[data-checks]').forEach(box=>{const ids=box.dataset.checks.split(','),n=ids.filter(i=>solved.has(i)).length,v=box.closest('.view').dataset.view,a=$(`nav a[data-v="${v}"]`);
+    $('.n',a).textContent=n+'/'+ids.length;a.classList.toggle('done',n===ids.length);});}
+function renderChecks(){
+  $$('[data-checks]').forEach(box=>{box.innerHTML='';box.dataset.checks.split(',').forEach((id,qi)=>{
+    const C=CHECKS[id],el=document.createElement('div');el.className='check';el.id='c-'+id;
+    let body='';
+    if(C.num)body=`<div class="fields">${C.num.map((f,i)=>`<label for="${id}-${i}">${f[0]} = <input type="text" inputmode="decimal" autocomplete="off" id="${id}-${i}"></label>`).join('')}</div>`;
+    if(C.mcq)body=`<div class="opts">${C.mcq.map((o,i)=>`<label for="${id}-${i}"><input type="radio" name="${id}" id="${id}-${i}" value="${i}"><span>${o}</span></label>`).join('')}</div>`;
+    if(C.multi)body=`<div class="opts inline">${C.multi.map((o,i)=>`<label for="${id}-${i}"><input type="checkbox" id="${id}-${i}" value="${i}"><span class="m">${o}</span></label>`).join('')}</div>`;
+    el.innerHTML=`<span class="lab">CHECK ${qi+1}</span><p class="q">${C.q}</p>${body}`+
+      (C.special?'':`<div class="btns"><button class="pri" data-act="check">Check</button><button class="ghost" data-act="show">Show solution</button></div>`)+
+      `<p class="fb" aria-live="polite"></p><p class="why" hidden>${C.why}</p>`;
+    box.appendChild(el);
+    if(solved.has(id)){el.classList.add('solved');$('.fb',el).className='fb good';$('.fb',el).textContent='Solved.';$('.why',el).hidden=false;}
+    el.addEventListener('click',e=>{const act=e.target.dataset&&e.target.dataset.act;if(!act)return;const fb=$('.fb',el);
+      if(act==='show'){$('.why',el).hidden=false;return;}
+      let ok=false,msg='Not yet. Check your work and try again.';
+      if(C.num){const vals=C.num.map((f,i)=>parseNum($(`#${id}-${i}`).value));
+        if(vals.some(isNaN))msg='Enter a number in every box. Decimals and simple fractions such as 3/5 both work.';
+        else{const bad=C.num.filter((f,i)=>Math.abs(vals[i]-f[1])>f[2]);ok=!bad.length;if(!ok&&C.num.length>1)msg=`${C.num.length-bad.length} of ${C.num.length} values are right. Recheck ${bad.map(f=>f[0]).join(' and ')}.`;}}
+      if(C.mcq){const r=$(`input[name="${id}"]:checked`,el);if(!r)msg='Choose one option first.';else ok=+r.value===C.ans;}
+      if(C.multi){const pick=$$('input:checked',el).map(i=>+i.value);ok=pick.length===C.ans.length&&C.ans.every(a=>pick.includes(a));
+        if(!ok){const miss=C.ans.filter(a=>!pick.includes(a)).length,extra=pick.filter(a=>!C.ans.includes(a)).length;msg=`Not yet: ${miss} missing and ${extra} selected that should not be.`;}}
+      if(ok)solve(id);else{fb.className='fb bad';fb.textContent=msg;}});
+    el.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.matches('input[type=text]'))$('[data-act=check]',el).click();});
+  });});
+  tally();
+}
+
+/* ===================== ROUTER ===================== */
+const DRAW={'line-search':lsDraw,'subgradient':()=>{suDraw();sdDraw();},'projected':pgDraw,'frank-wolfe':fwDraw,'sgd':sgDraw,'proximal':pxDraw};
+let current='line-search';
+function show(){stopRun();const h=location.hash.replace('#','');current=DRAW[h]?h:'line-search';
+  $$('.view').forEach(v=>v.classList.toggle('on',v.dataset.view===current));
+  $$('nav a').forEach(a=>a.dataset.v===current?a.setAttribute('aria-current','page'):a.removeAttribute('aria-current'));
+  DRAW[current]();}
+function redraw(){readTheme();DRAW[current]();}
+readTheme(); lsInit();suInit();pgInit();fwInit();sgInit();pxInit(); renderChecks();
+$('#resetAll').onclick=()=>{solved.clear();save();FW.streak=0;renderChecks();};
+addEventListener('hashchange',show); addEventListener('resize',redraw);
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change',redraw);
+new MutationObserver(redraw).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+show(); if(document.fonts&&document.fonts.ready)document.fonts.ready.then(redraw);
+</script>
+</body>
+</html>
